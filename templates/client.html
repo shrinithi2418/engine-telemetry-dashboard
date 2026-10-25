@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engine Telemetry Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-orange: #fb923c;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --danger-bg: rgba(239, 68, 68, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            background-image: radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+                              radial-gradient(at 100% 100%, rgba(239, 68, 68, 0.05) 0px, transparent 50%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        header {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 1.25rem 1.75rem;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+        .brand p { font-size: 0.85rem; color: var(--text-secondary); }
+
+        .meta-group { display: flex; align-items: center; gap: 1rem; }
+
+        .badge {
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+        }
+
+        .badge-nodes {
+            color: var(--accent-green);
+            border-color: rgba(74, 222, 128, 0.3);
+            background: rgba(74, 222, 128, 0.08);
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            box-shadow: 0 0 12px var(--accent-green);
+        }
+
+        .alert-banner {
+            display: none;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--accent-red);
+            color: var(--text-primary);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            align-items: center;
+            justify-content: space-between;
+            animation: pulse-banner 1.5s infinite;
+        }
+
+        @keyframes pulse-banner {
+            0% { box-shadow: 0 0 0px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.7); }
+            100% { box-shadow: 0 0 0px rgba(239, 68, 68, 0.4); }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 1.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .card.alert-critical {
+            border-color: var(--accent-red) !important;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .card.alert-critical .value-display {
+            color: var(--accent-red);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .value-display { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; margin: 0.25rem 0; }
+        .unit { font-size: 1rem; color: var(--text-secondary); font-weight: 400; margin-left: 0.25rem; }
+        .control-group { display: flex; gap: 0.5rem; }
+
+        input[type="number"], select {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+
+        button:active { transform: scale(0.98); }
+        .btn-update { background: var(--accent-blue); color: #0f172a; }
+        .btn-control { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-control:hover { background: rgba(255, 255, 255, 0.15); }
+
+        .btn-export {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: var(--accent-blue);
+        }
+        .btn-export:hover {
+            background: rgba(56, 189, 248, 0.25);
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .chart-container { position: relative; height: 220px; width: 100%; }
+
+        .actions-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 1.25rem 1.5rem;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .host-controls { display: flex; align-items: center; gap: 0.75rem; }
+        .btn-leave { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+        .btn-leave:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); }
+        .btn-terminate { background: var(--danger-bg); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--accent-red); }
+        .btn-terminate:hover { background: rgba(239, 68, 68, 0.25); }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <header>
+            <div class="brand">
+                <h1>Engine Telemetry</h1>
+                <p>Real-Time Synchronized Stream</p>
+            </div>
+            <div class="meta-group">
+                <!-- Connected Nodes Counter -->
+                <span class="badge badge-nodes" id="nodes-count">Nodes: 1</span>
+                <span class="badge" id="role-display">Assigning...</span>
+                <div class="status-pill">
+                    <span class="dot" id="status-dot"></span>
+                    <span id="status-text">Connecting</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="alert-banner" class="alert-banner">
+            <span id="alert-msg">⚠️ SYSTEM WARNING: Critical Engine Parameter Exceeded!</span>
+            <span style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 0.2rem 0.5rem; border-radius: 4px;">OVERRIDE ACTIVE</span>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="card" id="card-temp">
+                <div class="card-header">
+                    <span>Temperature</span>
+                    <span style="color: var(--accent-orange)">T-01</span>
+                </div>
+                <div class="value-display">
+                    <span id="temp-val">--</span><span class="unit">°C</span>
+                </div>
+                <div class="control-group">
+                    <input type="number" id="temp-input" step="0.1" placeholder="Set value">
+                    <button class="btn-update" onclick="updateParam('temperature', 'temp-input')">Set</button>
+                </div>
+            </div>
+
+            <div class="card" id="card-press">
+                <div class="card-header">
+                    <span>System Pressure</span>
+                    <span style="color: var(--accent-blue)">P-01</span>
+                </div>
+                <div class="value-display">
+                    <span id="press-val">--</span><span class="unit">PSI</span>
+                </div>
+                <div class="control-group">
+                    <input type="number" id="press-input" step="0.1" placeholder="Set value">
+                    <button class="btn-update" onclick="updateParam('pressure', 'press-input')">Set</button>
+                </div>
+            </div>
+
+            <div class="card" id="card-fuel">
+                <div class="card-header">
+                    <span>Fuel Flow Rate</span>
+                    <span style="color: var(--accent-green)">F-01</span>
+                </div>
+                <div class="value-display">
+                    <span id="fuel-val">--</span><span class="unit">L/h</span>
+                </div>
+                <div class="control-group">
+                    <input type="number" id="fuel-input" step="0.1" placeholder="Set value">
+                    <button class="btn-update" onclick="updateParam('fuel_flow', 'fuel-input')">Set</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <span>Real-Time Telemetry Trends</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary)">Last 15 Data Ticks</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </div>
+
+        <div class="actions-card">
+            <!-- Session Export Button -->
+            <button class="btn-export" onclick="exportSessionCSV()">📥 Export Session Log (CSV)</button>
+            
+            <div id="host-panel" class="host-controls" style="display: none;">
+                <button id="btn-pause" class="btn-control" onclick="togglePause()">Pause Stream</button>
+                <select id="speed-select" onchange="changeSpeed(this.value)" style="width: 110px;">
+                    <option value="0.2">0.2s Interval</option>
+                    <option value="0.5">0.5s Interval</option>
+                    <option value="1.0" selected>1.0s Interval</option>
+                    <option value="2.0">2.0s Interval</option>
+                </select>
+                <button id="btn-terminate" class="btn-terminate" onclick="terminateSystem()">Terminate Globally</button>
+            </div>
+
+            <button id="btn-leave" class="btn-leave" onclick="disconnectClient()">Leave Session</button>
+        </div>
+    </div>
+
+    <script>
+        const THRESHOLDS = {
+            temperature: 110.0,
+            pressure: 65.0,
+            fuel_flow: 32.0
+        };
+
+        // Recorded session history buffer for export
+        const sessionHistory = [];
+
+        const ctx = document.getElementById('telemetryChart').getContext('2d');
+        const maxDataPoints = 15;
+
+        const telemetryChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temperature (°C)', data: [], borderColor: '#fb923c', borderWidth: 2, pointRadius: 3 },
+                    { label: 'Pressure (PSI)', data: [], borderColor: '#38bdf8', borderWidth: 2, pointRadius: 3 },
+                    { label: 'Fuel Flow (L/h)', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 3 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } }
+                },
+                plugins: { legend: { labels: { color: '#f8fafc', font: { family: 'Inter' } } } }
+            }
+        });
+
+        const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const ws = new WebSocket(wsProtocol + window.location.host + "/ws");
+        
+        const statusText = document.getElementById("status-text");
+        const statusDot = document.getElementById("status-dot");
+        const roleBadge = document.getElementById("role-display");
+        const nodesBadge = document.getElementById("nodes-count");
+        const hostPanel = document.getElementById("host-panel");
+        const btnLeave = document.getElementById("btn-leave");
+        const btnPause = document.getElementById("btn-pause");
+        const speedSelect = document.getElementById("speed-select");
+
+        const alertBanner = document.getElementById("alert-banner");
+        const alertMsg = document.getElementById("alert-msg");
+
+        function checkAlerts(data) {
+            let activeAlerts = [];
+
+            const cardTemp = document.getElementById("card-temp");
+            if (data.temperature >= THRESHOLDS.temperature) {
+                cardTemp.classList.add("alert-critical");
+                activeAlerts.push(`High Temp (${data.temperature}°C)`);
+            } else {
+                cardTemp.classList.remove("alert-critical");
+            }
+
+            const cardPress = document.getElementById("card-press");
+            if (data.pressure >= THRESHOLDS.pressure) {
+                cardPress.classList.add("alert-critical");
+                activeAlerts.push(`High Pressure (${data.pressure} PSI)`);
+            } else {
+                cardPress.classList.remove("alert-critical");
+            }
+
+            const cardFuel = document.getElementById("card-fuel");
+            if (data.fuel_flow >= THRESHOLDS.fuel_flow) {
+                cardFuel.classList.add("alert-critical");
+                activeAlerts.push(`High Fuel Flow (${data.fuel_flow} L/h)`);
+            } else {
+                cardFuel.classList.remove("alert-critical");
+            }
+
+            if (activeAlerts.length > 0) {
+                alertMsg.innerText = `🚨 SYSTEM WARNING: ${activeAlerts.join(" | ")}`;
+                alertBanner.style.display = "flex";
+            } else {
+                alertBanner.style.display = "none";
+            }
+        }
+
+        ws.onmessage = (event) => {
+            const response = JSON.parse(event.data);
+            
+            if (response.type === "role_assignment") {
+                if (response.role === "host") {
+                    roleBadge.innerText = "Host Node";
+                    roleBadge.style.color = "var(--accent-red)";
+                    roleBadge.style.borderColor = "rgba(248, 113, 113, 0.3)";
+                    hostPanel.style.display = "flex";
+                    btnLeave.style.display = "none";
+                } else {
+                    roleBadge.innerText = "Client Node";
+                    roleBadge.style.color = "var(--accent-blue)";
+                    roleBadge.style.borderColor = "rgba(56, 189, 248, 0.3)";
+                    hostPanel.style.display = "none";
+                    btnLeave.style.display = "inline-block";
+                }
+                statusText.innerText = "Connected";
+                statusDot.style.backgroundColor = "var(--accent-green)";
+                statusDot.style.boxShadow = "0 0 12px var(--accent-green)";
+            }
+            else if (response.type === "node_count") {
+                nodesBadge.innerText = `Nodes: ${response.count}`;
+            }
+            else if (response.type === "stream_state") {
+                btnPause.innerText = response.paused ? "Resume Stream" : "Pause Stream";
+                speedSelect.value = response.delay.toFixed(1);
+            }
+            else if (response.type === "tick") {
+                document.getElementById("temp-val").innerText = response.data.temperature;
+                document.getElementById("press-val").innerText = response.data.pressure;
+                document.getElementById("fuel-val").innerText = response.data.fuel_flow;
+
+                checkAlerts(response.data);
+
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                
+                // Record entry for CSV export
+                sessionHistory.push({
+                    timestamp: now,
+                    temperature: response.data.temperature,
+                    pressure: response.data.pressure,
+                    fuel_flow: response.data.fuel_flow
+                });
+
+                telemetryChart.data.labels.push(now);
+                telemetryChart.data.datasets[0].data.push(response.data.temperature);
+                telemetryChart.data.datasets[1].data.push(response.data.pressure);
+                telemetryChart.data.datasets[2].data.push(response.data.fuel_flow);
+
+                if (telemetryChart.data.labels.length > maxDataPoints) {
+                    telemetryChart.data.labels.shift();
+                    telemetryChart.data.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                telemetryChart.update();
+            } 
+            else if (response.type === "system_terminated") {
+                statusText.innerText = "Terminated";
+                statusDot.style.backgroundColor = "var(--accent-red)";
+                statusDot.style.boxShadow = "0 0 12px var(--accent-red)";
+                alert(response.message);
+                ws.close();
+            }
+        };
+
+        ws.onclose = () => {
+            if (!statusText.innerText.includes("Terminated")) {
+                statusText.innerText = "Disconnected";
+                statusDot.style.backgroundColor = "var(--accent-orange)";
+                statusDot.style.boxShadow = "0 0 12px var(--accent-orange)";
+            }
+        };
+
+        function updateParam(paramKey, inputId) {
+            const val = parseFloat(document.getElementById(inputId).value);
+            if (!isNaN(val)) {
+                ws.send(JSON.stringify({
+                    action: "update",
+                    data: { [paramKey]: val }
+                }));
+                document.getElementById(inputId).value = "";
+            }
+        }
+
+        function togglePause() {
+            ws.send(JSON.stringify({ action: "toggle_pause" }));
+        }
+
+        function changeSpeed(val) {
+            ws.send(JSON.stringify({ action: "set_speed", delay: parseFloat(val) }));
+        }
+
+        function disconnectClient() {
+            ws.send(JSON.stringify({ action: "disconnect_client" }));
+            statusText.innerText = "Left Session";
+            statusDot.style.backgroundColor = "var(--accent-orange)";
+            statusDot.style.boxShadow = "0 0 12px var(--accent-orange)";
+        }
+
+        function terminateSystem() {
+            if (confirm("Are you sure you want to terminate the session globally for all connected clients?")) {
+                ws.send(JSON.stringify({ action: "terminate_system" }));
+            }
+        }
+
+        // Export Session Log as CSV
+        function exportSessionCSV() {
+            if (sessionHistory.length === 0) {
+                alert("No telemetry data recorded yet to export.");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Temperature_C,Pressure_PSI,Fuel_Flow_Lh\n";
+            sessionHistory.forEach(row => {
+                csvContent += `${row.timestamp},${row.temperature},${row.pressure},${row.fuel_flow}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `telemetry_session_log_${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
